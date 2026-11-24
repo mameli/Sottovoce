@@ -9,6 +9,7 @@ SWIFT_VERSION = 6.0
 ARCHS = arm64
 
 INFOPLIST_FILE = Config/Info.plist
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/../Frameworks
 COMBINE_HIDPI_IMAGES = YES
 

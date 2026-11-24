@@ -22,6 +22,8 @@
     "defaultPrompt": [
       "Create SRT subtitles for this video: ",
       "Generate Short-style 2-word VTT subtitles for this clip: "
-    ]
+    ],
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png"
   }
 }
