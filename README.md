@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="plugins/sottovoce/assets/logo.png" width="128" height="128" alt="Sottovoce icon" />
+</p>
+
 # Sottovoce
 
 A personal macOS app, CLI, and local MCP server that turns the speech in a video or audio file into clean SRT or VTT subtitle files ready to import into DaVinci Resolve, CapCut, and similar editors. Everything runs locally on Apple Silicon.
