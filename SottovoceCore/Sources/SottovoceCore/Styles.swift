@@ -220,7 +220,7 @@ public struct ClassicStyle: Sendable {
     }
 
     /// The text of a Cue with its Lines separated by `\n`; a single word longer than a Line stays whole.
-    func lines(_ words: [String]) -> String {
+    public func lines(_ words: [String]) -> String {
         lineBreak(words) ?? words.joined(separator: " ")
     }
 

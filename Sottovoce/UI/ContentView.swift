@@ -134,6 +134,19 @@ struct ContentView: View {
                 Toggle("Speakers", isOn: $store.speakers)
                     .toggleStyle(.checkbox)
                     .disabled(store.isRunning)
+
+                if #available(macOS 26.0, *), store.style == .classic {
+                    Picker("Translate", selection: $store.translateLanguage) {
+                        Text("No translation").tag("")
+                        Divider()
+                        ForEach(Translator.commonLanguages, id: \.code) { lang in
+                            Text("→ \(lang.name)").tag(lang.code)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 130)
+                    .disabled(store.isRunning)
+                }
             }
 
             Spacer()

@@ -1,6 +1,7 @@
 import AppKit
 import SottovoceCore
 import SwiftUI
+@preconcurrency import Translation
 
 struct SettingsView: View {
     var body: some View {
@@ -13,8 +14,14 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Vocabulary", systemImage: "character.book.closed")
                 }
+            if #available(macOS 26.0, *) {
+                TranslationSettingsTab()
+                    .tabItem {
+                        Label("Translation", systemImage: "translate")
+                    }
+            }
         }
-        .frame(width: 520, height: 340)
+        .frame(width: 520, height: 360)
     }
 }
 
@@ -201,5 +208,79 @@ private struct VocabularySettingsTab: View {
         } catch {
             status = "Could not save: \(error.localizedDescription)"
         }
+    }
+}
+
+@available(macOS 26.0, *)
+private struct TranslationSettingsTab: View {
+    @State private var sourceCode = "en"
+    @State private var statuses: [String: LanguageAvailability.Status] = [:]
+    @State private var downloadConfiguration: TranslationSession.Configuration?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Source language:")
+                Picker("Source", selection: $sourceCode) {
+                    ForEach(Translator.commonLanguages, id: \.code) { lang in
+                        Text(lang.name).tag(lang.code)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 160)
+                Spacer()
+                Button("Refresh") {
+                    Task { await checkAvailability() }
+                }
+            }
+
+            List(Translator.commonLanguages.filter { $0.code != sourceCode }, id: \.code) { lang in
+                HStack {
+                    Text(lang.name)
+                    Spacer()
+                    switch statuses[lang.code] {
+                    case .installed:
+                        Label("Installed", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .supported:
+                        Button("Download…") {
+                            downloadConfiguration = TranslationSession.Configuration(
+                                source: Locale.Language(identifier: sourceCode),
+                                target: Locale.Language(identifier: lang.code)
+                            )
+                        }
+                    case .unsupported:
+                        Text("Unsupported")
+                            .foregroundStyle(.secondary)
+                    case nil:
+                        ProgressView()
+                            .controlSize(.small)
+                    @unknown default:
+                        Text("Unavailable")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+        .padding(16)
+        .task(id: sourceCode) {
+            await checkAvailability()
+        }
+        .translationTask(downloadConfiguration) { session in
+            try? await session.prepareTranslation()
+            await checkAvailability()
+            downloadConfiguration = nil
+        }
+    }
+
+    private func checkAvailability() async {
+        let availability = LanguageAvailability()
+        let source = Locale.Language(identifier: sourceCode)
+        var next: [String: LanguageAvailability.Status] = [:]
+        for lang in Translator.commonLanguages where lang.code != sourceCode {
+            next[lang.code] = await availability.status(from: source, to: Locale.Language(identifier: lang.code))
+        }
+        statuses = next
     }
 }

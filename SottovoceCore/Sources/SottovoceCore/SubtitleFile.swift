@@ -9,9 +9,14 @@ public enum Format: String, CaseIterable, Sendable, Codable {
 /// Writing Cues as a Subtitle File (plain text, UTF-8 without BOM, numbered Cues, no overlaps, no
 /// zero-length Cues).
 public enum SubtitleFile {
-    /// The Subtitle File for a Media File: next to it, same base name.
-    public static func url(for mediaFile: URL, format: Format = .srt) -> URL {
-        mediaFile.deletingPathExtension().appendingPathExtension(format.rawValue)
+    /// The Subtitle File for a Media File: next to it, same base name, with an optional language
+    /// code before the extension for a Translation (`film.it.srt`).
+    public static func url(for mediaFile: URL, format: Format = .srt, language: String? = nil) -> URL {
+        let base = mediaFile.deletingPathExtension()
+        if let language, !language.isEmpty {
+            return base.appendingPathExtension(language).appendingPathExtension(format.rawValue)
+        }
+        return base.appendingPathExtension(format.rawValue)
     }
 
     /// Renders Cues in the requested Format.

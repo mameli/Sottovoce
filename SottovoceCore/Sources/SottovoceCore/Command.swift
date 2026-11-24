@@ -23,6 +23,8 @@ public enum Command: Equatable, Sendable {
         public var json = false
         /// Opt-in Speaker diarization: split Cues on every Speaker change.
         public var speakers = false
+        /// Optional target language code (e.g. "it", "en") for a Classic Translation.
+        public var translate: String? = nil
         /// Classic Style parameters (CLI only; GUI keeps defaults).
         public var maxLineCharacters = 42
         public var maxLines = 2
@@ -36,6 +38,7 @@ public enum Command: Equatable, Sendable {
             format: Format = .srt,
             json: Bool = false,
             speakers: Bool = false,
+            translate: String? = nil,
             maxLineCharacters: Int = 42,
             maxLines: Int = 2,
             maxDuration: TimeInterval = 7,
@@ -47,6 +50,7 @@ public enum Command: Equatable, Sendable {
             self.format = format
             self.json = json
             self.speakers = speakers
+            self.translate = translate
             self.maxLineCharacters = maxLineCharacters
             self.maxLines = maxLines
             self.maxDuration = maxDuration
@@ -71,6 +75,7 @@ public enum Command: Equatable, Sendable {
         case unknownOption(String)
         case missingValue(String)
         case invalidValue(option: String, value: String, expected: String)
+        case invalidCombination(String)
         case missingFolder
 
         public var description: String {
@@ -78,6 +83,7 @@ public enum Command: Equatable, Sendable {
             case .unknownOption(let option): "Unknown option: \(option)"
             case .missingValue(let option): "\(option) needs a value"
             case .invalidValue(let option, let value, let expected): "Invalid value for \(option): \(value) (expected \(expected))"
+            case .invalidCombination(let message): message
             case .missingFolder: "watch needs a folder path"
             }
         }
@@ -137,6 +143,13 @@ public enum Command: Equatable, Sendable {
                     throw .invalidValue(option: argument, value: raw, expected: "srt or vtt")
                 }
                 options.format = format
+            case "--translate":
+                let raw = try value(for: argument).lowercased()
+                let valid = (2...8).contains(raw.count) && raw.allSatisfy { $0.isASCII && ($0.isLetter || $0 == "-") }
+                guard valid else {
+                    throw .invalidValue(option: argument, value: raw, expected: "a language code such as it or en")
+                }
+                options.translate = raw
             case "--max-line-chars":
                 let raw = try value(for: argument)
                 guard let chars = Int(raw), chars >= 10 else {
@@ -167,6 +180,9 @@ public enum Command: Equatable, Sendable {
                 positionals.append(argument)
             }
         }
+        if options.translate != nil, options.style == .short {
+            throw .invalidCombination("--translate is only supported with the classic style")
+        }
         return (positionals, options)
     }
 
@@ -185,6 +201,7 @@ public enum Command: Equatable, Sendable {
           -w, --words 1|2|3           Words per cue in the short style (default 1)
               --format srt|vtt        Subtitle file format (default srt)
               --speakers              Split cues at speaker changes (Nemotron diarization)
+              --translate LANG        Also write a translated subtitle file (classic only, macOS 26+)
           -f, --force                 Replace a subtitle file that already exists
               --json                  Print a JSON array of results on stdout
 
@@ -206,6 +223,8 @@ public enum Command: Equatable, Sendable {
 public struct SubtitlingResult: Equatable, Sendable, Codable {
     public let mediaFile: String
     public let subtitleFile: String?
+    public let translationFile: String?
+    public let translationLanguage: String?
     public let format: Format?
     public let style: Style?
     public let language: String?
@@ -216,6 +235,8 @@ public struct SubtitlingResult: Equatable, Sendable, Codable {
     public init(
         mediaFile: String,
         subtitleFile: String? = nil,
+        translationFile: String? = nil,
+        translationLanguage: String? = nil,
         format: Format? = nil,
         style: Style? = nil,
         language: String? = nil,
@@ -225,6 +246,8 @@ public struct SubtitlingResult: Equatable, Sendable, Codable {
     ) {
         self.mediaFile = mediaFile
         self.subtitleFile = subtitleFile
+        self.translationFile = translationFile
+        self.translationLanguage = translationLanguage
         self.format = format
         self.style = style
         self.language = language

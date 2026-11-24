@@ -39,10 +39,21 @@ final class MCPSubtitlingService: SubtitlingService, @unchecked Sendable {
         if !options.force, FileManager.default.fileExists(atPath: outputPath) {
             return .failure(Subtitling.Failure(description: "\(output.lastPathComponent) already exists (pass force: true to replace it)"))
         }
+        var translationPath: String?
+        if let targetLanguage = options.translate {
+            let translationURL = SubtitleFile.url(for: url, format: options.format, language: targetLanguage)
+            let path = translationURL.path(percentEncoded: false)
+            if !options.force, FileManager.default.fileExists(atPath: path) {
+                return .failure(Subtitling.Failure(description: "\(translationURL.lastPathComponent) already exists (pass force: true to replace it)"))
+            }
+            translationPath = path
+        }
 
         let queued = SubtitleJobStatus(
             mediaFile: mediaPath,
             subtitleFile: outputPath,
+            translationFile: translationPath,
+            translationLanguage: options.translate,
             state: .queued,
             phase: "queued",
             format: options.format,
@@ -139,6 +150,8 @@ final class MCPSubtitlingService: SubtitlingService, @unchecked Sendable {
                     SubtitleJobStatus(
                         mediaFile: mediaPath,
                         subtitleFile: outputPath,
+                        translationFile: result.translationFile,
+                        translationLanguage: result.translationLanguage,
                         state: .completed,
                         phase: "done",
                         format: request.options.format,

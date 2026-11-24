@@ -41,6 +41,8 @@ final class QueueStore {
     var words: Int = 1
     var format: Format = .srt
     var speakers = false
+    /// Target language code for Classic Translation (macOS 26+); empty string means no translation.
+    var translateLanguage = ""
     var isRunning = false
     var statusMessage: String?
     var overwritePrompt: OverwritePrompt?
@@ -128,12 +130,14 @@ final class QueueStore {
         let currentWords = words
         let currentFormat = format
         let currentSpeakers = speakers
+        let currentTranslate = (currentStyle == .classic && !translateLanguage.isEmpty) ? translateLanguage : nil
         let options = Command.Options(
             force: true,
             style: currentStyle,
             words: currentWords,
             format: currentFormat,
-            speakers: currentSpeakers
+            speakers: currentSpeakers,
+            translate: currentTranslate
         )
 
         runTask = Task { [self] in
@@ -153,8 +157,18 @@ final class QueueStore {
 
                 let mediaFile = items[index].mediaFile
                 let output = SubtitleFile.url(for: mediaFile, format: currentFormat)
-                if !replaceAll, FileManager.default.fileExists(atPath: output.path(percentEncoded: false)) {
-                    let decision = await askOverwrite(fileName: output.lastPathComponent)
+                let translationOutput = currentTranslate.map {
+                    SubtitleFile.url(for: mediaFile, format: currentFormat, language: $0)
+                }
+                let existingFile: URL? = if FileManager.default.fileExists(atPath: output.path(percentEncoded: false)) {
+                    output
+                } else if let translationOutput, FileManager.default.fileExists(atPath: translationOutput.path(percentEncoded: false)) {
+                    translationOutput
+                } else {
+                    nil
+                }
+                if !replaceAll, let existingFile {
+                    let decision = await askOverwrite(fileName: existingFile.lastPathComponent)
                     switch decision {
                     case .replace:
                         break

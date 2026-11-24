@@ -74,8 +74,13 @@ enum WatchedFolder {
                         if let json = try? SubtitlingResult.encodeJSON([result]) {
                             FileHandle.standardOutput.write(Data((json + "\n").utf8))
                         }
-                    } else if let subtitleFile = result.subtitleFile {
-                        FileHandle.standardOutput.write(Data((subtitleFile + "\n").utf8))
+                    } else {
+                        if let subtitleFile = result.subtitleFile {
+                            FileHandle.standardOutput.write(Data((subtitleFile + "\n").utf8))
+                        }
+                        if let translationFile = result.translationFile {
+                            FileHandle.standardOutput.write(Data((translationFile + "\n").utf8))
+                        }
                     }
                 } catch {
                     handled[path] = stamp

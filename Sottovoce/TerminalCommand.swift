@@ -51,16 +51,42 @@ enum TerminalCommand {
     }
 
     /// Runs async work to the end from the synchronous start of the process (the app's `init`),
-    /// before any window exists.
+    /// before any window exists, pumping the main RunLoop so Apple frameworks (such as Translation)
+    /// that deliver XPC callbacks on the main queue never deadlock.
     private static func waitFor(_ work: @escaping @Sendable () async -> Int32) -> Int32 {
-        final class Box: @unchecked Sendable { var value = ExitCode.failure }
-        let box = Box()
-        let done = DispatchSemaphore(value: 0)
-        Task.detached {
-            box.value = await work()
-            done.signal()
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _finished = false
+            private var _value = ExitCode.failure
+
+            var finished: Bool {
+                lock.lock()
+                defer { lock.unlock() }
+                return _finished
+            }
+
+            var value: Int32 {
+                lock.lock()
+                defer { lock.unlock() }
+                return _value
+            }
+
+            func complete(_ code: Int32) {
+                lock.lock()
+                _value = code
+                _finished = true
+                lock.unlock()
+                CFRunLoopStop(CFRunLoopGetMain())
+            }
         }
-        done.wait()
+        let box = Box()
+        Task.detached {
+            let code = await work()
+            box.complete(code)
+        }
+        while !box.finished {
+            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+        }
         return box.value
     }
 

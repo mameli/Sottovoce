@@ -11,6 +11,8 @@ public struct SubtitleJobStatus: Equatable, Sendable, Codable {
 
     public let mediaFile: String
     public let subtitleFile: String
+    public let translationFile: String?
+    public let translationLanguage: String?
     public let state: State
     public let phase: String?
     public let format: Format
@@ -23,6 +25,8 @@ public struct SubtitleJobStatus: Equatable, Sendable, Codable {
     public init(
         mediaFile: String,
         subtitleFile: String,
+        translationFile: String? = nil,
+        translationLanguage: String? = nil,
         state: State,
         phase: String? = nil,
         format: Format,
@@ -34,6 +38,8 @@ public struct SubtitleJobStatus: Equatable, Sendable, Codable {
     ) {
         self.mediaFile = mediaFile
         self.subtitleFile = subtitleFile
+        self.translationFile = translationFile
+        self.translationLanguage = translationLanguage
         self.state = state
         self.phase = phase
         self.format = format
@@ -120,6 +126,7 @@ public struct MCPServer: Sendable {
                 "words": ["type": "integer", "minimum": 1, "maximum": 3, "description": "Words per Cue in the short style (1-3, default 1)."],
                 "format": ["type": "string", "enum": ["srt", "vtt"], "description": "Subtitle File Format: srt (default) or vtt."],
                 "speakers": ["type": "boolean", "description": "Split Cues on every Speaker change (default false)."],
+                "translate": ["type": "string", "description": "Optional target language code (e.g. 'it', 'en') for a Classic Translation (macOS 26+)."],
                 "force": ["type": "boolean", "description": "Replace an existing Subtitle File instead of failing (default false)."],
             ], required: ["path"]),
         ],
@@ -164,6 +171,17 @@ public struct MCPServer: Sendable {
             }
             if let speakers = arguments["speakers"] as? Bool {
                 options.speakers = speakers
+            }
+            if let rawTranslate = arguments["translate"] as? String {
+                let code = rawTranslate.trimmingCharacters(in: .whitespaces).lowercased()
+                let valid = (2...8).contains(code.count) && code.allSatisfy { $0.isASCII && ($0.isLetter || $0 == "-") }
+                guard valid else {
+                    return Self.toolResult("Invalid translate language: \(rawTranslate).", isError: true)
+                }
+                if options.style == .short {
+                    return Self.toolResult("Translation is only supported with the classic style.", isError: true)
+                }
+                options.translate = code
             }
             if let force = arguments["force"] as? Bool {
                 options.force = force

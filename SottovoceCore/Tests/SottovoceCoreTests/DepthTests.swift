@@ -121,4 +121,16 @@ import Testing
         let owners = ModelLocator.standard(applicationSupport: root).nemotronCandidates { present.contains($0.path) }
         #expect(owners.map(\.name) == ["Takku"])
     }
+
+    @Test func translationURLAndCommandValidation() throws {
+        #expect(SubtitleFile.url(for: URL(filePath: "/v/film.mov"), format: .srt, language: "it").path == "/v/film.it.srt")
+        #expect(SubtitleFile.url(for: URL(filePath: "/v/film.mov"), format: .vtt, language: "en").path == "/v/film.en.vtt")
+
+        let cmd = try Command.parse(["film.mov", "--translate", "IT"])
+        #expect(cmd == .subtitle(mediaFiles: ["film.mov"], options: .init(translate: "it")))
+
+        #expect(throws: Command.ParseError.invalidCombination("--translate is only supported with the classic style")) {
+            try Command.parse(["film.mov", "--style", "short", "--translate", "it"])
+        }
+    }
 }

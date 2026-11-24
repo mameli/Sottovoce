@@ -30,6 +30,12 @@ enum Subtitling {
                 if !options.force, FileManager.default.fileExists(atPath: output.path(percentEncoded: false)) {
                     throw Failure(description: "\(output.lastPathComponent) already exists (use --force to replace it)")
                 }
+                if let targetLanguage = options.translate {
+                    let translationOutput = SubtitleFile.url(for: mediaFile, format: options.format, language: targetLanguage)
+                    if !options.force, FileManager.default.fileExists(atPath: translationOutput.path(percentEncoded: false)) {
+                        throw Failure(description: "\(translationOutput.lastPathComponent) already exists (use --force to replace it)")
+                    }
+                }
                 if let modelFailure {
                     throw modelFailure
                 }
@@ -49,8 +55,9 @@ enum Subtitling {
                     onPhase: { phase in progress("\(name): \(phase)") }
                 )
                 results.append(result)
-                if !options.json, let subtitleFile = result.subtitleFile {
-                    print(subtitleFile)
+                if !options.json {
+                    if let subtitleFile = result.subtitleFile { print(subtitleFile) }
+                    if let translationFile = result.translationFile { print(translationFile) }
                 }
             } catch {
                 failed = true
@@ -112,10 +119,29 @@ enum Subtitling {
         let content = SubtitleFile.render(cues, format: options.format)
         try Data(content.utf8).write(to: output, options: .atomic)
         let language = detectLanguage(of: transcript)
+
+        var translationPath: String?
+        if let targetLanguage = options.translate {
+            guard options.style == .classic else { throw Translator.Failure.classicOnly }
+            onPhase("translating to \(targetLanguage)")
+            let translatedCues = try await Translator.translate(
+                cues,
+                from: language,
+                to: targetLanguage,
+                style: options.classicStyle
+            )
+            let translationURL = SubtitleFile.url(for: mediaFile, format: options.format, language: targetLanguage)
+            let translatedContent = SubtitleFile.render(translatedCues, format: options.format)
+            try Data(translatedContent.utf8).write(to: translationURL, options: .atomic)
+            translationPath = translationURL.path(percentEncoded: false)
+        }
+
         onPhase("\(cues.count) cues, \(transcript.words.count) words in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
         return SubtitlingResult(
             mediaFile: mediaFile.path(percentEncoded: false),
             subtitleFile: output.path(percentEncoded: false),
+            translationFile: translationPath,
+            translationLanguage: translationPath == nil ? nil : options.translate,
             format: options.format,
             style: options.style,
             language: language,
