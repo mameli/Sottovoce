@@ -1,0 +1,19 @@
+.DS_Store
+build/
+DerivedData/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+Config/Local.xcconfig
+
+# Test media: kept locally, never committed
+*.mp4
+*.mov
+*.m4v
+*.mkv
+*.mp3
+*.wav
+
+# Local issues and specs (docs/agents/issue-tracker.md): never committed
+.scratch/
