@@ -32,10 +32,6 @@ _Avoid_: hot folder, inbox
 The words spoken in a Media File, each with its own start and end time and, when Speakers are on, who said it, in the language spoken. Cues are built from it; it is never translated.
 _Avoid_: transcription, text
 
-**Engine**:
-The speech recognizer that produces the Transcript: Parakeet or Apple.
-_Avoid_: model, backend, recognizer
-
 **Speaker**:
 One distinct voice in a Media File, told apart from the others without a name.
 _Avoid_: voice, person, participant

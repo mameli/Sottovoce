@@ -1,14 +1,9 @@
 ---
-status: proposed
+status: rejected
 ---
 
 # Two Engines: Parakeet and Apple SpeechTranscriber
 
-Sottovoce offers two Engines. **Parakeet** through FluidAudio, as in Takku: local, 25 European languages, detects the language by itself (so it cannot be forced), and less prone than Whisper to inventing text over music and silence. It prefers Parakeet Ultra and accepts v3 when that is the only one already on the Mac, so two Macs may subtitle with different models; with neither present it downloads Ultra. **Apple SpeechTranscriber**, on macOS 26 and later only: two to three times faster, per-run timings precise to the sample, models managed by macOS, but about 10 languages and the language must be given up front, which is why `--language` exists for this Engine only.
+Proposed: offer Apple SpeechTranscriber (macOS 26+) next to Parakeet, with the winner of a word-timing spike as the default, and `--language` for Apple's engine, which needs the language up front.
 
-The default is whichever wins the spike in issue 02 on word-timing accuracy, which the Short Style depends on; status stays `proposed` until then.
-
-## Considered Options
-
-- **Whisper (WhisperKit)**: slower, and hallucinates over music and silence; rejected.
-- **Parakeet only**: simpler, but gives up Apple's speed and timing precision on macOS 26.
+Rejected on 2026-11-24 after the spike in issue 02 (a 12.6 min Italian vlog and a 19 min English tech video, YouTube's auto captions as a third opinion). Apple gave no timing advantage: equivalent in Italian, a steady 80–190 ms early in English. It was 4–5× slower than Parakeet (about 75× realtime against 275–365×), often left out commas and full stops in Italian, which the Classic Style splits on, and would have cost a language option, a Language menu and a macOS 26 gate. Parakeet stays the only engine (ADR 0002). Worth reopening only if a new Apple release beats those numbers.
