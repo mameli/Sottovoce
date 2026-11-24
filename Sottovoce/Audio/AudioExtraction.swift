@@ -13,12 +13,14 @@ enum AudioExtraction {
         case unreadable(String)
         case noAudio(String)
         case unsupportedFormat(String)
+        case ffmpegMissing
 
         var description: String {
             switch self {
             case .unreadable: "not a video or audio file macOS can read"
             case .noAudio: "no audio track"
             case .unsupportedFormat(let format): "unsupported audio format: \(format)"
+            case .ffmpegMissing: "not a video or audio file macOS can read; install ffmpeg with `brew install ffmpeg`"
             }
         }
     }
@@ -39,11 +41,122 @@ enum AudioExtraction {
     static func run(_ mediaFile: URL, into directory: URL) async throws -> Extracted {
         do {
             return try await readWithAssetReader(mediaFile, into: directory)
+        } catch Failure.noAudio(let name) {
+            throw Failure.noAudio(name)
+        } catch {
+            do {
+                return try readWithAudioFile(mediaFile, into: directory)
+            } catch Failure.noAudio(let name) {
+                throw Failure.noAudio(name)
+            } catch {
+                return try await readWithFFmpeg(mediaFile, into: directory)
+            }
+        }
+    }
+
+    /// Locates Homebrew's `ffmpeg` (or `ffprobe`) without bundling it (ADR 0009).
+    static func findTool(_ name: String) -> URL? {
+        let candidates = [
+            "/opt/homebrew/bin/\(name)",
+            "/usr/local/bin/\(name)",
+            "/usr/bin/\(name)",
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return URL(filePath: path)
+        }
+        if let envPath = ProcessInfo.processInfo.environment["PATH"] {
+            for dir in envPath.split(separator: ":") {
+                let candidate = "\(dir)/\(name)"
+                if FileManager.default.isExecutableFile(atPath: candidate) {
+                    return URL(filePath: candidate)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Fallback for containers AVFoundation cannot open (MKV, WebM, etc.) via Homebrew `ffmpeg`.
+    private static func readWithFFmpeg(_ mediaFile: URL, into directory: URL) async throws -> Extracted {
+        let name = mediaFile.lastPathComponent
+        guard let ffmpeg = findTool("ffmpeg") else {
+            throw Failure.ffmpegMissing
+        }
+        let url = directory.appending(path: "\(UUID().uuidString).wav")
+        let process = Process()
+        process.executableURL = ffmpeg
+        process.arguments = [
+            "-nostdin",
+            "-v", "error",
+            "-y",
+            "-i", mediaFile.path(percentEncoded: false),
+            "-vn",
+            "-ac", "1",
+            "-ar", String(Int(sampleRate)),
+            "-c:a", "pcm_s16le",
+            url.path(percentEncoded: false),
+        ]
+        let stderr = Pipe()
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = stderr
+        process.standardOutput = FileHandle.nullDevice
+        try process.run()
+        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let errText = String(decoding: errData, as: UTF8.self)
+        guard process.terminationStatus == 0 else {
+            try? FileManager.default.removeItem(at: url)
+            if errText.localizedCaseInsensitiveContains("does not contain any stream")
+                || errText.localizedCaseInsensitiveContains("matches no streams") {
+                throw Failure.noAudio(name)
+            }
+            throw Failure.unreadable(name)
+        }
+        do {
+            let wav = try AVAudioFile(forReading: url)
+            guard wav.length > 0 else {
+                try? FileManager.default.removeItem(at: url)
+                throw Failure.noAudio(name)
+            }
+            return Extracted(url: url, duration: Double(wav.length) / wav.processingFormat.sampleRate, skipped: 0)
         } catch let failure as Failure {
             throw failure
         } catch {
-            return try readWithAudioFile(mediaFile, into: directory)
+            try? FileManager.default.removeItem(at: url)
+            throw Failure.unreadable(name)
         }
+    }
+
+    /// Reads the video track's frame duration via `ffprobe` when AVFoundation cannot open the file.
+    static func frameDurationWithFFprobe(of mediaFile: URL) -> TimeInterval? {
+        guard let ffprobe = findTool("ffprobe") else { return nil }
+        let process = Process()
+        process.executableURL = ffprobe
+        process.arguments = [
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            mediaFile.path(percentEncoded: false),
+        ]
+        let stdout = Pipe()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let text = String(decoding: outData, as: UTF8.self)
+        for line in text.split(whereSeparator: \.isNewline) {
+            let parts = line.split(separator: "/")
+            if parts.count == 2, let num = Double(parts[0]), let den = Double(parts[1]), num > 0, den > 0 {
+                return den / num
+            }
+            if parts.count == 1, let fps = Double(parts[0]), fps > 0 {
+                return 1 / fps
+            }
+        }
+        return nil
     }
 
     private static var wavSettings: [String: Any] {

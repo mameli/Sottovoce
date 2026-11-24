@@ -14,6 +14,7 @@ enum Subtitling {
     static func run(_ mediaFiles: [String], options: Command.Options) async -> Int32 {
         var transcriber: Transcriber?
         let speechDetector = SpeechDetector { progress($0) }
+        let speakerDiarizer = SpeakerDiarizer()
         var results: [SubtitlingResult] = []
         var failed = false
         var modelFailure: Error?
@@ -43,6 +44,7 @@ enum Subtitling {
                     output: output,
                     with: transcriber!,
                     speechDetector: speechDetector,
+                    speakerDiarizer: options.speakers ? speakerDiarizer : nil,
                     options: options,
                     onPhase: { phase in progress("\(name): \(phase)") }
                 )
@@ -72,14 +74,15 @@ enum Subtitling {
     }
 
     /// Subtitles one Media File using an already-loaded `Transcriber` and `SpeechDetector`.
-    /// Shared by the CLI, MCP server, and GUI.
+    /// Shared by the CLI, Watched Folder, MCP server, and GUI.
     static func subtitleOne(
         _ mediaFile: URL,
         output: URL,
         with transcriber: Transcriber,
         speechDetector: SpeechDetector,
+        speakerDiarizer: SpeakerDiarizer? = nil,
         options: Command.Options,
-        onPhase: @Sendable (String) -> Void = { _ in }
+        onPhase: @escaping @Sendable (String) -> Void = { _ in }
     ) async throws -> SubtitlingResult {
         let started = Date()
         onPhase("reading audio")
@@ -91,11 +94,18 @@ enum Subtitling {
             onPhase("\(String(format: "%.1f", audio.skipped)) s of unreadable audio replaced with silence")
         }
         onPhase("transcribing \(duration(audio.duration))")
-        let transcript = try await transcriber.transcribe(audio.url, speechDetector: speechDetector)
+        var transcript = try await transcriber.transcribe(audio.url, speechDetector: speechDetector)
+        if options.speakers, let speakerDiarizer, !transcript.words.isEmpty {
+            let turns = try await speakerDiarizer.turns(inFile: audio.url, onPhase: onPhase)
+            transcript = assigningSpeakers(to: transcript, turns: turns)
+        }
+        let vocabulary = Vocabulary.load()
+        transcript = vocabulary.applying(to: transcript)
+
         let cues: [Cue]
         switch options.style {
         case .classic:
-            cues = ClassicStyle().cues(transcript)
+            cues = options.classicStyle.cues(transcript)
         case .short:
             cues = ShortStyle(words: options.words, frameDuration: await frameDuration(of: mediaFile)).cues(transcript)
         }
@@ -125,14 +135,15 @@ enum Subtitling {
 
     /// The duration of one frame of the Media File's video track; nil for audio only.
     private static func frameDuration(of mediaFile: URL) async -> TimeInterval? {
-        guard let track = try? await AVURLAsset(url: mediaFile).loadTracks(withMediaType: .video).first else { return nil }
-        if let minimum = try? await track.load(.minFrameDuration), minimum.isNumeric, minimum.seconds > 0 {
-            return minimum.seconds
+        if let track = try? await AVURLAsset(url: mediaFile).loadTracks(withMediaType: .video).first {
+            if let minimum = try? await track.load(.minFrameDuration), minimum.isNumeric, minimum.seconds > 0 {
+                return minimum.seconds
+            }
+            if let rate = try? await track.load(.nominalFrameRate), rate > 0 {
+                return 1 / Double(rate)
+            }
         }
-        if let rate = try? await track.load(.nominalFrameRate), rate > 0 {
-            return 1 / Double(rate)
-        }
-        return nil
+        return AudioExtraction.frameDurationWithFFprobe(of: mediaFile)
     }
 
     static func duration(_ seconds: TimeInterval) -> String {

@@ -40,6 +40,10 @@ public struct ModelLocator: Sendable {
     public static let sileroRelativeFolder = "Models/silero-vad"
     /// Compiled CoreML file FluidAudio needs to load Silero VAD without downloading.
     public static let sileroRequiredFile = "Models/silero-vad/silero-vad-unified-256ms-v6.2.1.mlmodelc/coremldata.bin"
+    /// Relative path inside an owner's `modelsFolder` where FluidAudio stores Nemotron 3 Diarization.
+    public static let nemotronRelativeFolder = "nemotron-3-diarization"
+    /// File FluidAudio checks for Nemotron 3 Diarization.
+    public static let nemotronRequiredFile = "nemotron-3-diarization/learnable_sil_emb.bin"
 
     public let owners: [Owner]
 
@@ -63,6 +67,12 @@ public struct ModelLocator: Sendable {
     /// Marker file written inside Sottovoce's Silero VAD folder once a download completes.
     public var ownSileroMarker: URL {
         own.modelsFolder.appending(path: Self.sileroRelativeFolder, directoryHint: .isDirectory)
+            .appending(path: own.marker)
+    }
+
+    /// Marker file written inside Sottovoce's Nemotron diarization folder once a download completes.
+    public var ownNemotronMarker: URL {
+        own.modelsFolder.appending(path: Self.nemotronRelativeFolder, directoryHint: .isDirectory)
             .appending(path: own.marker)
     }
 
@@ -97,12 +107,21 @@ public struct ModelLocator: Sendable {
     /// Silero) are checked for the compiled CoreML model file so we never trigger a download into
     /// their folders.
     public func sileroCandidates(fileExists: (URL) -> Bool) -> [Owner] {
+        helperCandidates(relativeFolder: Self.sileroRelativeFolder, requiredFile: Self.sileroRequiredFile, fileExists: fileExists)
+    }
+
+    /// Every owner that already has Nemotron 3 Diarization on disk, own folder first.
+    public func nemotronCandidates(fileExists: (URL) -> Bool) -> [Owner] {
+        helperCandidates(relativeFolder: Self.nemotronRelativeFolder, requiredFile: Self.nemotronRequiredFile, fileExists: fileExists)
+    }
+
+    private func helperCandidates(relativeFolder: String, requiredFile: String, fileExists: (URL) -> Bool) -> [Owner] {
         owners.enumerated().compactMap { index, owner in
-            let modelFile = owner.modelsFolder.appending(path: Self.sileroRequiredFile)
+            let modelFile = owner.modelsFolder.appending(path: requiredFile)
             guard fileExists(modelFile) else { return nil }
             if index == 0 {
                 let marker = owner.modelsFolder
-                    .appending(path: Self.sileroRelativeFolder, directoryHint: .isDirectory)
+                    .appending(path: relativeFolder, directoryHint: .isDirectory)
                     .appending(path: owner.marker)
                 guard fileExists(marker) else { return nil }
             }

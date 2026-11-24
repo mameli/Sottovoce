@@ -14,16 +14,19 @@ public struct TimedToken: Equatable, Sendable {
     }
 }
 
-/// One word of the Transcript, with its own start and end time.
+/// One word of the Transcript, with its own start and end time and, when Speakers are on, who said
+/// it (numbered 1, 2, … in order of first appearance).
 public struct Word: Equatable, Sendable, Codable {
     public let text: String
     public let start: TimeInterval
     public let end: TimeInterval
+    public let speaker: Int?
 
-    public init(text: String, start: TimeInterval, end: TimeInterval) {
+    public init(text: String, start: TimeInterval, end: TimeInterval, speaker: Int? = nil) {
         self.text = text
         self.start = start
         self.end = end
+        self.speaker = speaker
     }
 }
 

@@ -39,6 +39,8 @@ enum TerminalCommand {
                 FileHandle.standardOutput.write(Data((line + "\n").utf8))
             })
             return ExitCode.ok
+        case .watch(let folder, let options):
+            return waitFor { await WatchedFolder.run(folder, options: options) }
         case .subtitle(let mediaFiles, let options):
             return waitFor { await Subtitling.run(mediaFiles, options: options) }
         }

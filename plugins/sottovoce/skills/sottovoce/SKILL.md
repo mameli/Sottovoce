@@ -13,6 +13,7 @@ Sottovoce transcribes local Media Files on this Mac (never uploading audio) and 
    - `style`: `"classic"` (default, 1–2 lines as in films/YouTube) or `"short"` (1–3 words for vertical short-form video).
    - `words`: `1`, `2`, or `3` (default `1`, used with `"short"`).
    - `format`: `"srt"` (default) or `"vtt"`.
+   - `speakers`: `true` to split Cues on every Speaker change (default `false`).
    - `force`: `true` to replace an existing Subtitle File (default `false`; ask the user before overwriting unless they asked to replace it).
 2. `create_subtitles` queues the Media File and returns the Subtitle File path immediately.
 3. Poll `subtitles_status` with the returned path until `state` is `"completed"` or `"failed"`, then report the Subtitle File path, detected language, duration, and Cue count.

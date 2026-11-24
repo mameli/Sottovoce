@@ -38,27 +38,32 @@ public struct ShortStyle: Sendable {
 
     public func cues(_ transcript: Transcript) -> [Cue] {
         let all = transcript.words
-        // 1. Group words: up to `words`, never across a sentence end or a pause.
+        // 1. Group words: up to `words`, never across a sentence end, a pause, or a Speaker change.
         var groups: [[Word]] = []
         var current: [Word] = []
         for (index, word) in all.enumerated() {
             current.append(word)
             let next = index + 1 < all.count ? all[index + 1] : nil
             let pauseFollows = next.map { $0.start - word.end >= Self.hold } ?? true
-            if current.count >= words || word.endsSentence || pauseFollows {
+            let speakerChanges = next.map { $0.speaker != word.speaker } ?? false
+            if current.count >= words || word.endsSentence || pauseFollows || speakerChanges {
                 groups.append(current)
                 current = []
             }
         }
         if !current.isEmpty { groups.append(current) }
 
-        // 2. Merge a group shown for less than the minimum into the next one, if it follows closely.
+        // 2. Merge a group shown for less than the minimum into the next one, if it follows closely
+        //    and is spoken by the same Speaker.
         var merged: [[Word]] = []
         var pending: [Word] = []
         for (index, group) in groups.enumerated() {
             pending += group
             let next = index + 1 < groups.count ? groups[index + 1] : nil
-            guard let next, next[0].start - pending.last!.end < Self.hold else {
+            guard let next,
+                  next[0].start - pending.last!.end < Self.hold,
+                  next[0].speaker == pending.last!.speaker
+            else {
                 merged.append(pending)
                 pending = []
                 continue
@@ -113,7 +118,21 @@ public struct ClassicStyle: Sendable {
     /// A pause this long between two words always starts a new Cue.
     public var pause: TimeInterval = 1.0
 
-    public init() {}
+    public init(
+        maxLineCharacters: Int = 42,
+        maxLines: Int = 2,
+        maxDuration: TimeInterval = 7,
+        minDuration: TimeInterval = 1,
+        maxCharactersPerSecond: Double = 17,
+        pause: TimeInterval = 1.0
+    ) {
+        self.maxLineCharacters = maxLineCharacters
+        self.maxLines = maxLines
+        self.maxDuration = maxDuration
+        self.minDuration = minDuration
+        self.maxCharactersPerSecond = maxCharactersPerSecond
+        self.pause = pause
+    }
 
     public func cues(_ transcript: Transcript) -> [Cue] {
         let groups = group(transcript.words)
@@ -135,14 +154,16 @@ public struct ClassicStyle: Sendable {
         return cues
     }
 
-    /// Splits the words into Cues. A sentence end or a pause always closes one; in between, the
-    /// cut points are chosen together (dynamic programming) so that each Cue fits, there are as few
-    /// Cues as possible, they end at punctuation when they can, and no Cue is a stray fragment.
+    /// Splits the words into Cues. A sentence end, a pause, or a Speaker change always closes one;
+    /// in between, the cut points are chosen together (dynamic programming) so that each Cue fits,
+    /// there are as few Cues as possible, they end at punctuation when they can, and no Cue is a
+    /// stray fragment.
     func group(_ words: [Word]) -> [[Word]] {
         var runs: [[Word]] = []
         var current: [Word] = []
         for word in words {
-            if let previous = current.last, word.start - previous.end >= pause {
+            if let previous = current.last,
+               word.start - previous.end >= pause || word.speaker != previous.speaker {
                 runs.append(current)
                 current = []
             }

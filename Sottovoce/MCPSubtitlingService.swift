@@ -86,6 +86,7 @@ final class MCPSubtitlingService: SubtitlingService, @unchecked Sendable {
     private func runWorker(_ stream: AsyncStream<Request>) async {
         var transcriber: Transcriber?
         let speechDetector = SpeechDetector()
+        let speakerDiarizer = SpeakerDiarizer()
         for await request in stream {
             let mediaPath = request.mediaFile.path(percentEncoded: false)
             let outputPath = request.output.path(percentEncoded: false)
@@ -119,6 +120,7 @@ final class MCPSubtitlingService: SubtitlingService, @unchecked Sendable {
                     output: request.output,
                     with: transcriber!,
                     speechDetector: speechDetector,
+                    speakerDiarizer: request.options.speakers ? speakerDiarizer : nil,
                     options: request.options,
                     onPhase: { [weak self] phase in
                         self?.update(mediaPath) {

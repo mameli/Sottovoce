@@ -119,6 +119,7 @@ public struct MCPServer: Sendable {
                 "style": ["type": "string", "enum": ["classic", "short"], "description": "classic (default): 1-2 lines as in films; short: 1-3 words for short-form video."],
                 "words": ["type": "integer", "minimum": 1, "maximum": 3, "description": "Words per Cue in the short style (1-3, default 1)."],
                 "format": ["type": "string", "enum": ["srt", "vtt"], "description": "Subtitle File Format: srt (default) or vtt."],
+                "speakers": ["type": "boolean", "description": "Split Cues on every Speaker change (default false)."],
                 "force": ["type": "boolean", "description": "Replace an existing Subtitle File instead of failing (default false)."],
             ], required: ["path"]),
         ],
@@ -160,6 +161,9 @@ public struct MCPServer: Sendable {
                     return Self.toolResult("Invalid format: \(rawFormat) (expected srt or vtt).", isError: true)
                 }
                 options.format = format
+            }
+            if let speakers = arguments["speakers"] as? Bool {
+                options.speakers = speakers
             }
             if let force = arguments["force"] as? Bool {
                 options.force = force

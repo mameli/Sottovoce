@@ -40,12 +40,14 @@ final class QueueStore {
     var style: Style = .classic
     var words: Int = 1
     var format: Format = .srt
+    var speakers = false
     var isRunning = false
     var statusMessage: String?
     var overwritePrompt: OverwritePrompt?
 
     @ObservationIgnored private var transcriber: Transcriber?
     @ObservationIgnored private let speechDetector = SpeechDetector()
+    @ObservationIgnored private let speakerDiarizer = SpeakerDiarizer()
     @ObservationIgnored private var runTask: Task<Void, Never>?
 
     var hasPendingWork: Bool {
@@ -125,7 +127,14 @@ final class QueueStore {
         let currentStyle = style
         let currentWords = words
         let currentFormat = format
-        let options = Command.Options(force: true, style: currentStyle, words: currentWords, format: currentFormat)
+        let currentSpeakers = speakers
+        let options = Command.Options(
+            force: true,
+            style: currentStyle,
+            words: currentWords,
+            format: currentFormat,
+            speakers: currentSpeakers
+        )
 
         runTask = Task { [self] in
             defer {
@@ -176,6 +185,7 @@ final class QueueStore {
                         output: output,
                         with: transcriber!,
                         speechDetector: speechDetector,
+                        speakerDiarizer: currentSpeakers ? speakerDiarizer : nil,
                         options: options,
                         onPhase: { [weak self] phase in
                             Task { @MainActor in

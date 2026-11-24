@@ -130,6 +130,10 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 100)
                 .disabled(store.isRunning)
+
+                Toggle("Speakers", isOn: $store.speakers)
+                    .toggleStyle(.checkbox)
+                    .disabled(store.isRunning)
             }
 
             Spacer()
