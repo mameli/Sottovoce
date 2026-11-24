@@ -16,7 +16,7 @@ struct ContentView: View {
             Divider()
             controlsBar
         }
-        .frame(minWidth: 560, minHeight: 400)
+        .frame(minWidth: 640, minHeight: 420)
         .overlay {
             if isDropTargeted {
                 RoundedRectangle(cornerRadius: 10)
@@ -100,56 +100,55 @@ struct ContentView: View {
     }
 
     private var controlsBar: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 8) {
-                Picker("Style", selection: $store.style) {
-                    Text("Classic").tag(Style.classic)
-                    Text("Short").tag(Style.short)
+        HStack(spacing: 12) {
+            Picker("Style", selection: $store.style) {
+                Text("Classic").tag(Style.classic)
+                Text("Short").tag(Style.short)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .fixedSize()
+            .disabled(store.isRunning)
+
+            if store.style == .short {
+                Picker("Words", selection: $store.words) {
+                    Text("1 word").tag(1)
+                    Text("2 words").tag(2)
+                    Text("3 words").tag(3)
                 }
                 .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 150)
+                .fixedSize()
                 .disabled(store.isRunning)
-
-                if store.style == .short {
-                    Picker("Words", selection: $store.words) {
-                        Text("1 word").tag(1)
-                        Text("2 words").tag(2)
-                        Text("3 words").tag(3)
-                    }
-                    .labelsHidden()
-                    .frame(width: 96)
-                    .disabled(store.isRunning)
-                }
-
-                Picker("Format", selection: $store.format) {
-                    Text("SRT").tag(Format.srt)
-                    Text("VTT").tag(Format.vtt)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 100)
-                .disabled(store.isRunning)
-
-                Toggle("Speakers", isOn: $store.speakers)
-                    .toggleStyle(.checkbox)
-                    .disabled(store.isRunning)
-
-                if #available(macOS 26.0, *), store.style == .classic {
-                    Picker("Translate", selection: $store.translateLanguage) {
-                        Text("No translation").tag("")
-                        Divider()
-                        ForEach(Translator.commonLanguages, id: \.code) { lang in
-                            Text("→ \(lang.name)").tag(lang.code)
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(width: 130)
-                    .disabled(store.isRunning)
-                }
             }
 
-            Spacer()
+            Picker("Format", selection: $store.format) {
+                Text("SRT").tag(Format.srt)
+                Text("VTT").tag(Format.vtt)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .fixedSize()
+            .disabled(store.isRunning)
+
+            Toggle("Speakers", isOn: $store.speakers)
+                .toggleStyle(.checkbox)
+                .fixedSize()
+                .disabled(store.isRunning)
+
+            if #available(macOS 26.0, *), store.style == .classic {
+                Picker("Translate", selection: $store.translateLanguage) {
+                    Text("No translation").tag("")
+                    Divider()
+                    ForEach(Translator.commonLanguages, id: \.code) { lang in
+                        Text("→ \(lang.name)").tag(lang.code)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .disabled(store.isRunning)
+            }
+
+            Spacer(minLength: 8)
 
             if let statusMessage = store.statusMessage {
                 Text(statusMessage)
@@ -163,12 +162,14 @@ struct ContentView: View {
                 Button("Cancel") {
                     store.cancel()
                 }
+                .fixedSize()
             } else {
                 Button("Start") {
                     store.start()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: .command)
+                .fixedSize()
                 .disabled(!store.hasPendingWork)
             }
         }

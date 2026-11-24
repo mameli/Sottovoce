@@ -12,7 +12,7 @@ struct SottovoceApp: App {
         WindowGroup("Sottovoce") {
             ContentView(store: store)
         }
-        .defaultSize(width: 620, height: 460)
+        .defaultSize(width: 680, height: 460)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Add Media Files…") {
