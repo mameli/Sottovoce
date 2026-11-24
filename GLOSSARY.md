@@ -22,11 +22,27 @@ _Avoid_: export type, file type
 The ordered list of Media Files waiting to be subtitled; they are processed one at a time.
 _Avoid_: batch, job list
 
+**Watched Folder**:
+A folder Sottovoce keeps an eye on, subtitling every Media File that lands in it.
+_Avoid_: hot folder, inbox
+
 ### Subtitles
 
 **Transcript**:
-The words spoken in a Media File, each with its own start and end time, in the language spoken. Cues are built from it; it is never translated.
+The words spoken in a Media File, each with its own start and end time and, when Speakers are on, who said it, in the language spoken. Cues are built from it; it is never translated.
 _Avoid_: transcription, text
+
+**Engine**:
+The speech recognizer that produces the Transcript: Parakeet or Apple.
+_Avoid_: model, backend, recognizer
+
+**Speaker**:
+One distinct voice in a Media File, told apart from the others without a name.
+_Avoid_: voice, person, participant
+
+**Vocabulary**:
+The list of terms (names, acronyms, jargon) that speech recognition tends to get wrong, each with the variants heard instead. It applies to every Transcript.
+_Avoid_: dictionary, glossary, custom words
 
 **Cue**:
 One timed entry of a Subtitle File: the text shown on screen, with its start and end time.
@@ -48,8 +64,12 @@ _Avoid_: normal, standard, film mode
 The Style of short-form vertical videos: Cues of one to three words, one by default.
 _Avoid_: word-by-word, single-word, karaoke
 
+**Translation**:
+A second Subtitle File, next to the original, with the Classic Cues rendered in another language.
+_Avoid_: translated subtitles, dub
+
 ### Ecosystem
 
 **Sister App**:
-Takku or Dimmela, the author's other apps, whose downloaded models Sottovoce uses instead of downloading its own.
+Takku or Dimmela, the author's other apps. The three apps use each other's downloaded models instead of downloading their own.
 _Avoid_: companion app, other app

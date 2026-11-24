@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: superseded by ADR 0008
 ---
 
 # Parakeet as the only transcription engine
