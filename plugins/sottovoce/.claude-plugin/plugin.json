@@ -1,0 +1,10 @@
+{
+  "name": "sottovoce",
+  "version": "0.1.0",
+  "description": "Create SRT or VTT subtitle files from local video or audio files on macOS, ready for DaVinci Resolve and CapCut. MCP server and skill; needs Sottovoce in /Applications.",
+  "author": {
+    "name": "Sottovoce"
+  },
+  "license": "MIT",
+  "keywords": ["subtitles", "srt", "vtt", "video", "audio", "davinci-resolve", "capcut"]
+}

@@ -30,11 +30,22 @@ enum TerminalCommand {
             print(Command.usage)
             return ExitCode.ok
         case .version:
-            print(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")
+            print(appVersion)
+            return ExitCode.ok
+        case .mcp:
+            let service = MCPSubtitlingService()
+            let server = MCPServer(service: service, version: appVersion)
+            server.run(readLine: { Swift.readLine() }, write: { line in
+                FileHandle.standardOutput.write(Data((line + "\n").utf8))
+            })
             return ExitCode.ok
         case .subtitle(let mediaFiles, let options):
             return waitFor { await Subtitling.run(mediaFiles, options: options) }
         }
+    }
+
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
     /// Runs async work to the end from the synchronous start of the process (the app's `init`),

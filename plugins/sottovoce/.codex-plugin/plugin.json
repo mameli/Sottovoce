@@ -1,0 +1,27 @@
+{
+  "name": "sottovoce",
+  "version": "0.1.0",
+  "description": "Create SRT or VTT subtitle files from local video or audio files on macOS, ready for DaVinci Resolve and CapCut.",
+  "author": {
+    "name": "Sottovoce"
+  },
+  "license": "MIT",
+  "keywords": ["subtitles", "srt", "vtt", "video", "audio", "davinci-resolve", "capcut"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Sottovoce",
+    "shortDescription": "Generate SRT and VTT subtitle files from local videos and audio",
+    "longDescription": "Sottovoce transcribes local video and audio files on your Mac with Parakeet and writes clean SRT or VTT subtitle files ready to import into DaVinci Resolve and CapCut. Supports Classic (1-2 line film/YouTube style) and Short (1-3 word vertical video style). Requires Sottovoce in /Applications.",
+    "developerName": "Sottovoce",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create SRT subtitles for this video: ",
+      "Generate Short-style 2-word VTT subtitles for this clip: "
+    ]
+  }
+}

@@ -5,6 +5,7 @@ import Foundation
 public enum Command: Equatable, Sendable {
     case help
     case version
+    case mcp
     /// Subtitle each Media File, one at a time.
     case subtitle(mediaFiles: [String], options: Options)
 
@@ -36,7 +37,7 @@ public enum Command: Equatable, Sendable {
 
     /// The commands that are not a Media File. Run as `Sottovoce` (inside the bundle), only these,
     /// or a path to an existing file, make the executable act as the CLI instead of the app.
-    public static let names: Set<String> = ["help", "version", "--help", "-h", "--version"]
+    public static let names: Set<String> = ["help", "version", "mcp", "--help", "-h", "--version"]
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
         case unknownOption(String)
@@ -57,6 +58,7 @@ public enum Command: Equatable, Sendable {
         switch first {
         case "help", "--help", "-h": return .help
         case "version", "--version": return .version
+        case "mcp": return .mcp
         default: break
         }
         var options = Options()
@@ -116,6 +118,7 @@ public enum Command: Equatable, Sendable {
               --json                  Print a JSON array of results on stdout
 
         Commands:
+          mcp        Run the local stdio MCP server
           help       Show this help
           version    Show the version
         """

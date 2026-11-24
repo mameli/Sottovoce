@@ -37,12 +37,14 @@ enum Subtitling {
                     progress("Model: \(loaded.model.model.displayName) (from \(loaded.model.owner.name))")
                     transcriber = loaded
                 }
-                let result = try await subtitle(
+                let name = mediaFile.lastPathComponent
+                let result = try await subtitleOne(
                     mediaFile,
                     output: output,
                     with: transcriber!,
                     speechDetector: speechDetector,
-                    options: options
+                    options: options,
+                    onPhase: { phase in progress("\(name): \(phase)") }
                 )
                 results.append(result)
                 if !options.json, let subtitleFile = result.subtitleFile {
@@ -69,24 +71,26 @@ enum Subtitling {
         return failed ? ExitCode.failure : ExitCode.ok
     }
 
-    private static func subtitle(
+    /// Subtitles one Media File using an already-loaded `Transcriber` and `SpeechDetector`.
+    /// Shared by the CLI, MCP server, and GUI.
+    static func subtitleOne(
         _ mediaFile: URL,
         output: URL,
         with transcriber: Transcriber,
         speechDetector: SpeechDetector,
-        options: Command.Options
+        options: Command.Options,
+        onPhase: @Sendable (String) -> Void = { _ in }
     ) async throws -> SubtitlingResult {
-        let name = mediaFile.lastPathComponent
         let started = Date()
-        progress("\(name): reading audio")
+        onPhase("reading audio")
         let temporary = FileManager.default.temporaryDirectory.appending(path: "Sottovoce", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
         let audio = try await AudioExtraction.run(mediaFile, into: temporary)
         defer { try? FileManager.default.removeItem(at: audio.url) }
         if audio.skipped > 0 {
-            progress("\(name): \(String(format: "%.1f", audio.skipped)) s of unreadable audio replaced with silence")
+            onPhase("\(String(format: "%.1f", audio.skipped)) s of unreadable audio replaced with silence")
         }
-        progress("\(name): transcribing \(duration(audio.duration))")
+        onPhase("transcribing \(duration(audio.duration))")
         let transcript = try await transcriber.transcribe(audio.url, speechDetector: speechDetector)
         let cues: [Cue]
         switch options.style {
@@ -98,7 +102,7 @@ enum Subtitling {
         let content = SubtitleFile.render(cues, format: options.format)
         try Data(content.utf8).write(to: output, options: .atomic)
         let language = detectLanguage(of: transcript)
-        progress("\(name): \(cues.count) cues, \(transcript.words.count) words in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
+        onPhase("\(cues.count) cues, \(transcript.words.count) words in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
         return SubtitlingResult(
             mediaFile: mediaFile.path(percentEncoded: false),
             subtitleFile: output.path(percentEncoded: false),
@@ -131,7 +135,7 @@ enum Subtitling {
         return nil
     }
 
-    private static func duration(_ seconds: TimeInterval) -> String {
+    static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         return total >= 3600
             ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)

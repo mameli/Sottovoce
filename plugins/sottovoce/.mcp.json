@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sottovoce": {
+      "command": "/Applications/Sottovoce.app/Contents/MacOS/Sottovoce",
+      "args": ["mcp"]
+    }
+  }
+}
