@@ -11,9 +11,14 @@ public enum Command: Equatable, Sendable {
     public struct Options: Equatable, Sendable {
         /// Replace an existing Subtitle File instead of failing.
         public var force = false
+        public var style: Style = .classic
+        /// Words per Cue in the Short Style.
+        public var words = 1
 
-        public init(force: Bool = false) {
+        public init(force: Bool = false, style: Style = .classic, words: Int = 1) {
             self.force = force
+            self.style = style
+            self.words = words
         }
     }
 
@@ -23,10 +28,14 @@ public enum Command: Equatable, Sendable {
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
         case unknownOption(String)
+        case missingValue(String)
+        case invalidValue(option: String, value: String, expected: String)
 
         public var description: String {
             switch self {
             case .unknownOption(let option): "Unknown option: \(option)"
+            case .missingValue(let option): "\(option) needs a value"
+            case .invalidValue(let option, let value, let expected): "Invalid value for \(option): \(value) (expected \(expected))"
             }
         }
     }
@@ -40,11 +49,31 @@ public enum Command: Equatable, Sendable {
         }
         var options = Options()
         var mediaFiles: [String] = []
-        for argument in arguments {
+        var remaining = arguments[...]
+        func value(for option: String) throws(ParseError) -> String {
+            guard let value = remaining.popFirst(), !value.hasPrefix("-") else { throw .missingValue(option) }
+            return value
+        }
+        while let argument = remaining.popFirst() {
             switch argument {
-            case "--force", "-f": options.force = true
-            case let option where option.hasPrefix("-"): throw .unknownOption(option)
-            default: mediaFiles.append(argument)
+            case "--force", "-f":
+                options.force = true
+            case "--style", "-s":
+                let raw = try value(for: argument)
+                guard let style = Style(rawValue: raw.lowercased()) else {
+                    throw .invalidValue(option: argument, value: raw, expected: "classic or short")
+                }
+                options.style = style
+            case "--words", "-w":
+                let raw = try value(for: argument)
+                guard let words = Int(raw), (1...3).contains(words) else {
+                    throw .invalidValue(option: argument, value: raw, expected: "1, 2 or 3")
+                }
+                options.words = words
+            case let option where option.hasPrefix("-"):
+                throw .unknownOption(option)
+            default:
+                mediaFiles.append(argument)
             }
         }
         guard !mediaFiles.isEmpty else { return .help }
@@ -58,7 +87,10 @@ public enum Command: Equatable, Sendable {
         (interview.mov -> interview.srt), and prints its path.
 
         Options:
-          -f, --force    Replace a subtitle file that already exists
+          -s, --style classic|short   classic: one or two lines, as in films (default)
+                                      short: a few words at a time, as in short-form videos
+          -w, --words 1|2|3           Words per cue in the short style (default 1)
+          -f, --force                 Replace a subtitle file that already exists
 
         Commands:
           help       Show this help

@@ -25,6 +25,20 @@ import Testing
         #expect(try Command.parse(["a.mov", "-f"]) == .subtitle(mediaFiles: ["a.mov"], options: .init(force: true)))
     }
 
+    @Test func styleAndWords() throws {
+        #expect(try Command.parse(["a.mov", "--style", "short", "-w", "2"])
+            == .subtitle(mediaFiles: ["a.mov"], options: .init(style: .short, words: 2)))
+    }
+
+    @Test func invalidValuesAreRejected() {
+        #expect(throws: Command.ParseError.invalidValue(option: "--words", value: "4", expected: "1, 2 or 3")) {
+            try Command.parse(["a.mov", "--words", "4"])
+        }
+        #expect(throws: Command.ParseError.missingValue("--style")) {
+            try Command.parse(["a.mov", "--style"])
+        }
+    }
+
     @Test func unknownOptionIsRejected() {
         #expect(throws: Command.ParseError.unknownOption("--nope")) {
             try Command.parse(["a.mov", "--nope"])

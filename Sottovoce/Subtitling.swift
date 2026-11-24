@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SottovoceCore
 
@@ -50,10 +51,28 @@ enum Subtitling {
         }
         progress("\(name): transcribing \(duration(audio.duration))")
         let transcript = try await transcriber.transcribe(audio.url)
-        let cues = transcript.sentenceCues()
+        let cues: [Cue]
+        switch options.style {
+        case .classic:
+            cues = ClassicStyle().cues(transcript)
+        case .short:
+            cues = ShortStyle(words: options.words, frameDuration: await frameDuration(of: mediaFile)).cues(transcript)
+        }
         try Data(SubtitleFile.srt(cues).utf8).write(to: output, options: .atomic)
         progress("\(name): \(cues.count) cues, \(transcript.words.count) words in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
         return output
+    }
+
+    /// The duration of one frame of the Media File's video track; nil for audio only.
+    private static func frameDuration(of mediaFile: URL) async -> TimeInterval? {
+        guard let track = try? await AVURLAsset(url: mediaFile).loadTracks(withMediaType: .video).first else { return nil }
+        if let minimum = try? await track.load(.minFrameDuration), minimum.isNumeric, minimum.seconds > 0 {
+            return minimum.seconds
+        }
+        if let rate = try? await track.load(.nominalFrameRate), rate > 0 {
+            return 1 / Double(rate)
+        }
+        return nil
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {
