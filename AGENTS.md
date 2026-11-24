@@ -1,4 +1,4 @@
-# video2srt
+# Sottovoce
 
 App macOS che fa una cosa sola: prende un video e genera sottotitoli (SRT/VTT) compatibili con DaVinci Resolve, CapCut, ecc.
 
