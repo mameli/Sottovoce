@@ -16,9 +16,9 @@ enum AudioExtraction {
 
         var description: String {
             switch self {
-            case .unreadable(let name): "\(name): not a video or audio file macOS can read"
-            case .noAudio(let name): "\(name): no audio track"
-            case .unsupportedFormat(let format): "Unsupported audio format: \(format)"
+            case .unreadable: "not a video or audio file macOS can read"
+            case .noAudio: "no audio track"
+            case .unsupportedFormat(let format): "unsupported audio format: \(format)"
             }
         }
     }

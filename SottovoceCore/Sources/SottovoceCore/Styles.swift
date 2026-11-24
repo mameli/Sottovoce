@@ -1,7 +1,7 @@
 import Foundation
 
 /// The rule that decides how the words of the Transcript are grouped into Cues.
-public enum Style: String, CaseIterable, Sendable {
+public enum Style: String, CaseIterable, Sendable, Codable {
     case classic
     case short
 }

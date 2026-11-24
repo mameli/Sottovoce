@@ -1,9 +1,11 @@
 import AVFoundation
 import Foundation
+import NaturalLanguage
 import SottovoceCore
 
 /// `sottovoce <media-file>...`: subtitles each Media File in turn, the Queue of the CLI. Progress
-/// goes to stderr; stdout gets only the path of each Subtitle File written, so an agent can read it.
+/// goes to stderr; stdout gets only the path of each Subtitle File written (or a JSON array with
+/// `--json`), so an agent can read it cleanly.
 enum Subtitling {
     struct Failure: Error, CustomStringConvertible {
         let description: String
@@ -11,35 +13,70 @@ enum Subtitling {
 
     static func run(_ mediaFiles: [String], options: Command.Options) async -> Int32 {
         var transcriber: Transcriber?
+        let speechDetector = SpeechDetector { progress($0) }
+        var results: [SubtitlingResult] = []
         var failed = false
+        var modelFailure: Error?
+
         for path in mediaFiles {
             let mediaFile = URL(filePath: path).standardizedFileURL
+            let mediaPath = mediaFile.path(percentEncoded: false)
             do {
+                guard FileManager.default.fileExists(atPath: mediaPath) else {
+                    throw Failure(description: "file not found")
+                }
+                let output = SubtitleFile.url(for: mediaFile, format: options.format)
+                if !options.force, FileManager.default.fileExists(atPath: output.path(percentEncoded: false)) {
+                    throw Failure(description: "\(output.lastPathComponent) already exists (use --force to replace it)")
+                }
+                if let modelFailure {
+                    throw modelFailure
+                }
                 if transcriber == nil {
-                    let loaded = try await Transcriber.load()
+                    let loaded = try await Transcriber.load { progress($0) }
                     progress("Model: \(loaded.model.model.displayName) (from \(loaded.model.owner.name))")
                     transcriber = loaded
                 }
-                let written = try await subtitle(mediaFile, with: transcriber!, options: options)
-                print(written.path(percentEncoded: false))
+                let result = try await subtitle(
+                    mediaFile,
+                    output: output,
+                    with: transcriber!,
+                    speechDetector: speechDetector,
+                    options: options
+                )
+                results.append(result)
+                if !options.json, let subtitleFile = result.subtitleFile {
+                    print(subtitleFile)
+                }
             } catch {
                 failed = true
                 progress("\(mediaFile.lastPathComponent): \(error)")
-                if error is Transcriber.Failure { break }
+                results.append(SubtitlingResult(mediaFile: mediaPath, error: "\(error)"))
+                if error is Transcriber.Failure {
+                    modelFailure = error
+                }
+            }
+        }
+
+        if options.json {
+            do {
+                print(try SubtitlingResult.encodeJSON(results))
+            } catch {
+                failed = true
+                progress("Could not encode JSON output: \(error)")
             }
         }
         return failed ? ExitCode.failure : ExitCode.ok
     }
 
-    private static func subtitle(_ mediaFile: URL, with transcriber: Transcriber, options: Command.Options) async throws -> URL {
+    private static func subtitle(
+        _ mediaFile: URL,
+        output: URL,
+        with transcriber: Transcriber,
+        speechDetector: SpeechDetector,
+        options: Command.Options
+    ) async throws -> SubtitlingResult {
         let name = mediaFile.lastPathComponent
-        guard FileManager.default.fileExists(atPath: mediaFile.path(percentEncoded: false)) else {
-            throw Failure(description: "file not found")
-        }
-        let output = SubtitleFile.url(for: mediaFile)
-        if !options.force, FileManager.default.fileExists(atPath: output.path(percentEncoded: false)) {
-            throw Failure(description: "\(output.lastPathComponent) already exists (use --force to replace it)")
-        }
         let started = Date()
         progress("\(name): reading audio")
         let temporary = FileManager.default.temporaryDirectory.appending(path: "Sottovoce", directoryHint: .isDirectory)
@@ -50,7 +87,7 @@ enum Subtitling {
             progress("\(name): \(String(format: "%.1f", audio.skipped)) s of unreadable audio replaced with silence")
         }
         progress("\(name): transcribing \(duration(audio.duration))")
-        let transcript = try await transcriber.transcribe(audio.url)
+        let transcript = try await transcriber.transcribe(audio.url, speechDetector: speechDetector)
         let cues: [Cue]
         switch options.style {
         case .classic:
@@ -58,9 +95,28 @@ enum Subtitling {
         case .short:
             cues = ShortStyle(words: options.words, frameDuration: await frameDuration(of: mediaFile)).cues(transcript)
         }
-        try Data(SubtitleFile.srt(cues).utf8).write(to: output, options: .atomic)
+        let content = SubtitleFile.render(cues, format: options.format)
+        try Data(content.utf8).write(to: output, options: .atomic)
+        let language = detectLanguage(of: transcript)
         progress("\(name): \(cues.count) cues, \(transcript.words.count) words in \(String(format: "%.1f", Date().timeIntervalSince(started))) s")
-        return output
+        return SubtitlingResult(
+            mediaFile: mediaFile.path(percentEncoded: false),
+            subtitleFile: output.path(percentEncoded: false),
+            format: options.format,
+            style: options.style,
+            language: language,
+            duration: (audio.duration * 1000).rounded() / 1000,
+            cues: cues.count
+        )
+    }
+
+    /// Parakeet does not report the language it heard: read it from the Transcript text.
+    private static func detectLanguage(of transcript: Transcript) -> String? {
+        let text = transcript.words.map(\.text).joined(separator: " ")
+        guard !text.isEmpty else { return nil }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        return recognizer.dominantLanguage?.rawValue
     }
 
     /// The duration of one frame of the Media File's video track; nil for audio only.

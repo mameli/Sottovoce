@@ -14,11 +14,23 @@ public enum Command: Equatable, Sendable {
         public var style: Style = .classic
         /// Words per Cue in the Short Style.
         public var words = 1
+        /// Syntax of the Subtitle File written.
+        public var format: Format = .srt
+        /// Print a JSON array of results on stdout instead of one path per line.
+        public var json = false
 
-        public init(force: Bool = false, style: Style = .classic, words: Int = 1) {
+        public init(
+            force: Bool = false,
+            style: Style = .classic,
+            words: Int = 1,
+            format: Format = .srt,
+            json: Bool = false
+        ) {
             self.force = force
             self.style = style
             self.words = words
+            self.format = format
+            self.json = json
         }
     }
 
@@ -58,6 +70,8 @@ public enum Command: Equatable, Sendable {
             switch argument {
             case "--force", "-f":
                 options.force = true
+            case "--json":
+                options.json = true
             case "--style", "-s":
                 let raw = try value(for: argument)
                 guard let style = Style(rawValue: raw.lowercased()) else {
@@ -70,6 +84,12 @@ public enum Command: Equatable, Sendable {
                     throw .invalidValue(option: argument, value: raw, expected: "1, 2 or 3")
                 }
                 options.words = words
+            case "--format":
+                let raw = try value(for: argument)
+                guard let format = Format(rawValue: raw.lowercased()) else {
+                    throw .invalidValue(option: argument, value: raw, expected: "srt or vtt")
+                }
+                options.format = format
             case let option where option.hasPrefix("-"):
                 throw .unknownOption(option)
             default:
@@ -81,21 +101,63 @@ public enum Command: Equatable, Sendable {
     }
 
     public static let usage = """
-        Usage: sottovoce <media-file>...
+        Usage: sottovoce <media-file>... [options]
 
         Writes a subtitle file next to each video or audio file, with the same name
-        (interview.mov -> interview.srt), and prints its path.
+        (interview.mov -> interview.srt), and prints its path on stdout. Progress goes
+        to stderr.
 
         Options:
           -s, --style classic|short   classic: one or two lines, as in films (default)
                                       short: a few words at a time, as in short-form videos
           -w, --words 1|2|3           Words per cue in the short style (default 1)
+              --format srt|vtt        Subtitle file format (default srt)
           -f, --force                 Replace a subtitle file that already exists
+              --json                  Print a JSON array of results on stdout
 
         Commands:
           help       Show this help
           version    Show the version
         """
+}
+
+/// Structured result of subtitling one Media File, printed as a JSON array with `--json`.
+public struct SubtitlingResult: Equatable, Sendable, Codable {
+    public let mediaFile: String
+    public let subtitleFile: String?
+    public let format: Format?
+    public let style: Style?
+    public let language: String?
+    public let duration: Double?
+    public let cues: Int?
+    public let error: String?
+
+    public init(
+        mediaFile: String,
+        subtitleFile: String? = nil,
+        format: Format? = nil,
+        style: Style? = nil,
+        language: String? = nil,
+        duration: Double? = nil,
+        cues: Int? = nil,
+        error: String? = nil
+    ) {
+        self.mediaFile = mediaFile
+        self.subtitleFile = subtitleFile
+        self.format = format
+        self.style = style
+        self.language = language
+        self.duration = duration
+        self.cues = cues
+        self.error = error
+    }
+
+    public static func encodeJSON(_ results: [SubtitlingResult]) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(results)
+        return String(decoding: data, as: UTF8.self)
+    }
 }
 
 /// Exit codes of the CLI (sysexits.h where one fits).
