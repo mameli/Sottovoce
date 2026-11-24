@@ -1,0 +1,12 @@
+// Copy to Config/Local.xcconfig (ignored by git) to sign with a stable identity: macOS then
+// keeps folder permissions across builds.
+//
+// Option 1: a self-signed "Sottovoce" code signing certificate in your login keychain.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = Sottovoce
+DEVELOPMENT_TEAM =
+//
+// Option 2: the free Personal Team of your Apple ID in Xcode.
+// CODE_SIGN_STYLE = Automatic
+// CODE_SIGN_IDENTITY = Apple Development
+// DEVELOPMENT_TEAM = XXXXXXXXXX

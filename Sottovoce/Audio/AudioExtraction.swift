@@ -1,0 +1,174 @@
+import AVFoundation
+
+/// The audio track of a Media File as 16 kHz mono, the format Parakeet expects, written to a
+/// temporary WAV file so that a two-hour film never sits in memory.
+///
+/// Read with AVAssetReader, which sees the whole track: AVAudioFile, which Takku uses, reported
+/// 175 s of a 19-minute MP4 merged by yt-dlp and stopped there. When AVAssetReader fails, Takku's
+/// AVAudioFile reading takes over (ADR 0003): macOS's decoder can fail in the middle of a file other
+/// players read, so a failed stretch is read again one AAC packet at a time and only what stays
+/// unreadable is replaced with silence.
+enum AudioExtraction {
+    enum Failure: Error, CustomStringConvertible {
+        case unreadable(String)
+        case noAudio(String)
+        case unsupportedFormat(String)
+
+        var description: String {
+            switch self {
+            case .unreadable(let name): "\(name): not a video or audio file macOS can read"
+            case .noAudio(let name): "\(name): no audio track"
+            case .unsupportedFormat(let format): "Unsupported audio format: \(format)"
+            }
+        }
+    }
+
+    struct Extracted {
+        let url: URL
+        let duration: TimeInterval
+        /// Seconds of unreadable audio replaced with silence.
+        let skipped: TimeInterval
+    }
+
+    static let sampleRate: Double = 16_000
+    /// Frames read at a time: about a second of audio.
+    private static let framesPerRead: AVAudioFrameCount = 48_000
+    /// Frames read at a time after a read error: one AAC packet, the smallest stretch skipped.
+    private static let framesPerCarefulRead: AVAudioFrameCount = 1024
+
+    static func run(_ mediaFile: URL, into directory: URL) async throws -> Extracted {
+        do {
+            return try await readWithAssetReader(mediaFile, into: directory)
+        } catch let failure as Failure {
+            throw failure
+        } catch {
+            return try readWithAudioFile(mediaFile, into: directory)
+        }
+    }
+
+    private static var wavSettings: [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+        ]
+    }
+
+    private static func readWithAssetReader(_ mediaFile: URL, into directory: URL) async throws -> Extracted {
+        let name = mediaFile.lastPathComponent
+        let asset = AVURLAsset(url: mediaFile)
+        let tracks: [AVAssetTrack]
+        do {
+            tracks = try await asset.loadTracks(withMediaType: .audio)
+        } catch {
+            throw Failure.unreadable(name)
+        }
+        guard let track = tracks.first else { throw Failure.noAudio(name) }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: sampleRate, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ])
+        output.alwaysCopiesSampleData = false
+        reader.add(output)
+        guard reader.startReading(),
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)
+        else { throw reader.error ?? Failure.unreadable(name) }
+
+        let url = directory.appending(path: "\(UUID().uuidString).wav")
+        var frames: AVAudioFramePosition = 0
+        do {
+            let writer = try AVAudioFile(forWriting: url, settings: wavSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            while let sample = output.copyNextSampleBuffer() {
+                guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+                let bytes = CMBlockBufferGetDataLength(block)
+                let count = bytes / MemoryLayout<Float>.size
+                guard count > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else { continue }
+                let status = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: count * MemoryLayout<Float>.size, destination: buffer.floatChannelData![0])
+                guard status == kCMBlockBufferNoErr else { throw Failure.unreadable(name) }
+                buffer.frameLength = AVAudioFrameCount(count)
+                try writer.write(from: buffer)
+                frames += AVAudioFramePosition(count)
+            }
+            guard reader.status == .completed, frames > 0 else { throw reader.error ?? Failure.noAudio(name) }
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+        return Extracted(url: url, duration: Double(frames) / sampleRate, skipped: 0)
+    }
+
+    private static func readWithAudioFile(_ mediaFile: URL, into directory: URL) throws -> Extracted {
+        let name = mediaFile.lastPathComponent
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forReading: mediaFile)
+        } catch {
+            throw Failure.unreadable(name)
+        }
+        guard file.length > 0 else { throw Failure.noAudio(name) }
+        let input = file.processingFormat
+        guard input.sampleRate.isFinite, input.sampleRate > 0,
+              let output = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: input, to: output),
+              let readBuffer = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: framesPerRead)
+        else { throw Failure.unsupportedFormat(input.description) }
+
+        let url = directory.appending(path: "\(UUID().uuidString).wav")
+        let writer = try AVAudioFile(forWriting: url, settings: wavSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
+
+        var carefulUntil: AVAudioFramePosition = 0
+        var skippedFrames: AVAudioFramePosition = 0
+        while file.framePosition < file.length {
+            let position = file.framePosition
+            let isCareful = position < carefulUntil
+            do {
+                try file.read(into: readBuffer, frameCount: isCareful ? framesPerCarefulRead : framesPerRead)
+            } catch {
+                if isCareful {
+                    let end = min(position + AVAudioFramePosition(framesPerCarefulRead), file.length)
+                    try writeSilence(frames: end - position, inputRate: input.sampleRate, to: writer, format: output)
+                    skippedFrames += end - position
+                    file.framePosition = end
+                } else {
+                    carefulUntil = position + AVAudioFramePosition(framesPerRead)
+                    file.framePosition = position
+                }
+                continue
+            }
+            guard readBuffer.frameLength > 0 else { break }
+            try convert(readBuffer, with: converter, to: writer, format: output)
+        }
+        if skippedFrames == file.length { throw Failure.unreadable(name) }
+        return Extracted(
+            url: url,
+            duration: Double(file.length) / input.sampleRate,
+            skipped: Double(skippedFrames) / input.sampleRate
+        )
+    }
+
+    private static func convert(_ buffer: AVAudioPCMBuffer, with converter: AVAudioConverter, to writer: AVAudioFile, format: AVAudioFormat) throws {
+        let capacity = AVAudioFrameCount((Double(buffer.frameLength) * format.sampleRate / buffer.format.sampleRate).rounded(.up)) + 32
+        guard let converted = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return }
+        nonisolated(unsafe) var supplied = false
+        var error: NSError?
+        converter.convert(to: converted, error: &error) { _, status in
+            if supplied {
+                status.pointee = .noDataNow
+                return nil
+            }
+            supplied = true
+            status.pointee = .haveData
+            return buffer
+        }
+        if let error { throw error }
+        if converted.frameLength > 0 { try writer.write(from: converted) }
+    }
+
+    private static func writeSilence(frames: AVAudioFramePosition, inputRate: Double, to writer: AVAudioFile, format: AVAudioFormat) throws {
+        let count = AVAudioFrameCount((Double(frames) * format.sampleRate / inputRate).rounded())
+        guard count > 0, let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: count) else { return }
+        silence.frameLength = count
+        try writer.write(from: silence)
+    }
+}
